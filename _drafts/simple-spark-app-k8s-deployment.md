@@ -43,6 +43,41 @@ Because spark application is quite complex (consists of 1 driver and N executors
 - allows to use [sidecar container](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/blob/master/docs/user-guide.md#using-sidecar-containers) for driver and executor pods (useful for implementing log collection)
 - is used by [many companies](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/blob/master/docs/who-is-using.md) and has gained [lots of stars](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/stargazers) on github
 
+# Installing gcp-spark-on-k8s-operator
+To install gcp-spark-on-k8s-operator lets use [helm chart](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/tree/master/charts/spark-operator-chart). If you new to [Helm](https://helm.sh) think of it as a package manager for k8s: helm chart contains all k8s resources required for application(see [intallation guide](https://helm.sh/docs/intro/install/) for setup instructions).
+
+First of all lets add helm repository of spark-operator:
+```shell
+helm repo add spark-operator https://googlecloudplatform.github.io/spark-on-k8s-operator
+```
+
+Then create namespace where all spark-jobs are going to be executed:
+```shell
+kubectl create ns spark-jobs
+```
+
+And install spark-operator:
+```shell
+helm install spark-operator-release spark-operator/spark-operator \
+        --namespace spark-operator \
+        --create-namespace \
+        --set image.tag=v1beta2-1.2.3-3.1.1 \
+        --set sparkJobNamespace=spark-jobs \
+        --set webhook.enable=true \
+        --set metrics.enable=true \
+        --set batchScheduler.enable=true
+```
+We used several options to install operator, they are:
+- `--namespace spark-operator` - namespace called `spark-operator` where all operator resources will reside
+- `--set image.tag=v1beta2-1.2.3-3.1.1` - use operator image for spark v3.1.1
+- `--set sparkJobNamespace=spark-jobs` - set namespace where operator will launch spark jobs
+- `--set webhook.enable=true` - enable webhook which is responsible for ????
+- `--set metrics.enable=true` - enable exposure of spark-operator metrics ???
+- `--set batchScheduler.enable=true` - enable custom batch scheduler (more on this later)
+See [operator docs](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/tree/master/charts/spark-operator-chart#values) for a full list of parameters.
+
+# Deploying one-off spark job
+
 
 4. Как запустить простое приложение на spark один раз?
 5. Как запустить простое приложение на spark периодически?
