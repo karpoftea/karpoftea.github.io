@@ -63,6 +63,7 @@ helm install spark-operator-release spark-operator/spark-operator \
         --create-namespace \
         --set image.tag=v1beta2-1.2.3-3.1.1 \
         --set sparkJobNamespace=spark-jobs \
+        --set serviceAccounts.spark.name=spark-jobs-sa \
         --set webhook.enable=true \
         --set metrics.enable=true \
         --set batchScheduler.enable=true
@@ -71,12 +72,82 @@ We used several options to install operator, they are:
 - `--namespace spark-operator` - namespace called `spark-operator` where all operator resources will reside
 - `--set image.tag=v1beta2-1.2.3-3.1.1` - use operator image for spark v3.1.1
 - `--set sparkJobNamespace=spark-jobs` - set namespace where operator will launch spark jobs
+- `--set serviceAccounts.spark.name=spark-jobs-sa` - set service account for spark jobs
 - `--set webhook.enable=true` - enable webhook which is responsible for ????
 - `--set metrics.enable=true` - enable exposure of spark-operator metrics ???
 - `--set batchScheduler.enable=true` - enable custom batch scheduler (more on this later)
 See [operator docs](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/tree/master/charts/spark-operator-chart#values) for a full list of parameters.
 
+Check that chart was successfully installed:
+```shell
+helm status -n spark-operator spark-operator-release
+```
+, operator pods are running:
+```shell
+kubectl get pods -n spark-operator
+```
+, service account for spark jobs was created:
+```shell
+kubectl get sa -n -n spark-jobs
+```
+
 # Deploying one-off spark job
+Successfuly deployed operator waits for SparkApplication/ScheduledSparkApplication (CRD) to be deployed.
+For demo purposes we will use [SparkPi](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/SparkPi.scala) application bundled with spark disribution in `spark-examples_<scala-ver>-<spark-ver>.jar`.
+To deploy one-off spark job we will use SparkApplication manifest:
+```yaml
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: spark-pi-minimal
+  namespace: spark-jobs
+spec:
+  type: Scala
+  mode: cluster
+  image: "gcr.io/spark-operator/spark:v3.1.1"
+  sparkVersion: "3.1.1"
+  imagePullPolicy: IfNotPresent
+  mainClass: org.apache.spark.examples.SparkPi
+  mainApplicationFile: "local:///opt/spark/examples/jars/spark-examples_2.12-3.1.1.jar"
+  arguments: ["25000"]
+  restartPolicy:
+    type: Never
+  driver:
+    cores: 1
+    memory: "512m"
+    serviceAccount: spark-jobs-sa
+  executor:
+    cores: 1
+    instances: 1
+    memory: "512m"
+```
+
+Lets apply it:
+```shell
+kubectl apply -f manifests/spark-pi-minimal.yaml
+```
+
+List job pods to find driver pod and check logs: 
+```shell
+kubectl get pods -n spark-jobs
+kubectl logs <spark-pi-minimal-pod> -n spark-jobs
+```
+![spark-pi-minimal-driver-startup-logs](/assets/images/spark-pi-minimal-driver-startup-logs.png)
+
+Also list SparkApplication instances and check job events:
+```shell
+kubectl get sparkapplications -n spark-jobs
+kubectl describe sparkapplications spark-pi-minimal -n spark-jobs
+```
+![spark-pi-minimal-crd-events](/assets/images/spark-pi-minimal-crd-events.png)
+
+Hopefully job has started, now lets find job service and use port-forwarding to show driver UI:
+```shell
+kubectl get svc -n spark-jobs
+kubectl port-forward service/spark-pi-minimal-1625753252972366200-ui-svc 4040:4040 -n spark-jobs
+```
+You can see job progress in UI and after job is done check logs to see the result:
+![spark-pi-minimal-result-logs](/assets/images/spark-pi-minimal-result-logs.png)
 
 
 4. Как запустить простое приложение на spark один раз?
