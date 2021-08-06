@@ -27,14 +27,12 @@ baseurl: "" # the subpath of your site, e.g. /blog
 url: "https://karpoftea.github.io" # the base hostname & protocol for your site, e.g. http://example.com
 
 show_excerpts: true
-excerpt_separator: <!--more-->
 
 minima:
   social_links:
     twitter: _pls_
     github: karpoftea
     linkedin: karpov-ilya
-
 
 # Build settings
 theme: minima

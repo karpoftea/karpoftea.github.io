@@ -1,7 +1,15 @@
-In this article I'll give a short overview of different ways to deploy spark application to k8s cluster and use one of them run a trivial spark application.
+---
+layout: post
+title: "Simple Spark application k8s deployment"
+date: 2021-08-06 20:00:00 +0300
+tags: [spark, k8s, deployment]
+excerpt: In this post I'll give a short overview of different ways to deploy spark application to k8s cluster and use one of them run a trivial spark application.
+---
 
-<!--more-->
+* Table of contents
+{:toc}
 
+# Intro
 [Kubernetes](https://kubernetes.io/) gives a list of opportunities for executing spark applications:
 - cost effectiveness via
     - elastic scaling
@@ -32,7 +40,7 @@ kubectl apply -f manifests/spark-pi-minimal.yaml
 
 Because declarative way is native to k8s, supported by modern CD tools (ArgoCD, Flux) and allows to unify deployment for any type of applications I'll use this way.
 
-# Using k8s-operator for k8s-native deployment
+# K8s-native way for spark application deployment
 Because spark application is quite complex (consists of 1 driver and N executors) the most promising way to handle its deployment is to use [k8s-operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) and delegate managing application lifecycle to it. [GCP spark-on-k8s-operator](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator) is an advanced k8s-operator implementation for spark applications. It has rich set of features and community support:
 - implements [large amount of parameters](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/blob/master/docs/user-guide.md#table-of-contents) to execute spark job
 - has [pluggable](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/blob/master/docs/api-docs.md#sparkoperator.k8s.io/v1beta2.BatchSchedulerConfiguration) scheduler (e.g. [volcano scheduler](https://volcano.sh/en/) [integration](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/blob/master/docs/volcano-integration.md))
@@ -41,18 +49,17 @@ Because spark application is quite complex (consists of 1 driver and N executors
 - allows to use [sidecar container](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/blob/master/docs/user-guide.md#using-sidecar-containers) for driver and executor pods
 - is used by [many companies](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/blob/master/docs/who-is-using.md) and has gained [lots of stars](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/stargazers) on github
 
-# Prerequisites
+## Prerequisites: installing minikube
 For demo purposes we will use local [minikube](https://minikube.sigs.k8s.io/docs/) k8s cluster. Minikube provides excellent [Getting Started Guide](https://minikube.sigs.k8s.io/docs/start/) to setup local k8s cluster. When you are done with minikube installation start cluster:
 ```shell
 minikube start
 ```
-
-If you want to start 2 node minikube cluster (to test multi-executor deployment) use this command (mind `-p` option which stands for minikube profile, default is "minikube"):
+Check that cluster is ok:
 ```shell
-minikube start --cpus 2 --memory 2g --nodes 2 -p multikube
+minikube status
 ```
 
-# Installing gcp-spark-on-k8s-operator
+## Installing gcp-spark-on-k8s-operator
 To install gcp-spark-on-k8s-operator lets use [helm chart](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/tree/master/charts/spark-operator-chart). If you new to [Helm](https://helm.sh) think of it as a package manager for k8s: helm chart contains all k8s resources required for application(see [intallation guide](https://helm.sh/docs/intro/install/) for setup instructions).
 
 First of all lets add helm repository of spark-operator:
@@ -94,13 +101,16 @@ helm status -n spark-operator spark-operator-release
 ```
 and service account for spark jobs was created:
 ```shell
-kubectl get sa -n -n spark-jobs
+kubectl get sa -n spark-jobs
 ```
 and operator pods are running:
 ```shell
 kubectl get pods -n spark-operator
 ```
-# One-off spark job deployment
+
+It will take about 3-5 minutes to pull operator image and start all needed pods, so be patient.
+
+## One-off spark job deployment
 Successfuly deployed operator waits for [SparkApplication or ScheduledSparkApplication CRDs](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/tree/master/charts/spark-operator-chart/crds) to be deployed.
 For demo purposes we will use [SparkPi](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/SparkPi.scala) application bundled in spark disribution (`spark-examples_<scala-ver>-<spark-ver>.jar`).
 To deploy one-off spark job we will use following manifest:
@@ -130,6 +140,7 @@ spec:
     instances: 1
     memory: "512m"
 ```
+(All resources used in this post can be found in [git repo](https://github.com/karpoftea/spark-on-k8s-example))
 
 Lets apply it:
 ```shell
@@ -139,33 +150,55 @@ kubectl apply -f manifests/spark-pi-minimal.yaml
 List job pods to find driver pod and check logs: 
 ```shell
 kubectl get pods -n spark-jobs
-kubectl logs <spark-pi-minimal-pod> -n spark-jobs | less
+kubectl logs spark-pi-minimal-driver -n spark-jobs | less
 ```
-![spark-pi-minimal-driver-startup-logs](/assets/images/spark-pi-minimal-driver-startup-logs.png)
+
+You should see that driver has started, created web-app, and registered executor:
+```plain
+15:44:35 INFO Utils: Successfully started service 'SparkUI' on port 4040.
+...
+15:44:43 INFO KubernetesClusterSchedulerBackend$KubernetesDriverEndpoint: Registered executor NettyRpcEndpointRef(spark-client://Executor) (172.17.0.5:57074) with ID 1,  ResourceProfileId 0
+...
+15:44:45 INFO DAGScheduler: Submitting 50000 missing tasks from ResultStage 0 (MapPartitionsRDD[1] at map at SparkPi.scala:34) (first 15 tasks are for partitions Vector(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14))
+```
 
 Also list SparkApplication instances and check job events:
 ```shell
 kubectl get sparkapplications -n spark-jobs
 kubectl describe sparkapplications spark-pi-minimal -n spark-jobs
 ```
-![spark-pi-minimal-crd-events](/assets/images/spark-pi-minimal-crd-events.png)
+You will see that sparkapplication has started driver and executor:
+```shell
+Events:
+Type    Reason                     Age                    From            Message
+----    ------                     ----                   ----            -------
+Normal  SparkApplicationAdded      4m6s                   spark-operator  SparkApplication spark-pi-minimal was added, enqueuing it for submission
+Normal  SparkApplicationSubmitted  4m                     spark-operator  SparkApplication spark-pi-minimal was submitted successfully
+Normal  SparkDriverRunning         3m58s                  spark-operator  Driver spark-pi-minimal-driver is running
+Normal  SparkExecutorPending       3m52s (x2 over 3m52s)  spark-operator  Executor spark-pi-eb46b77b1c233988-exec-1 is pending
+Normal  SparkExecutorRunning       3m51s                  spark-operator  Executor spark-pi-eb46b77b1c233988-exec-1 is running
+```
 
-Hopefully job has started. Now lets find job service and use port-forwarding to view driver UI:
+So job has started and doing well. Now lets find job service and use port-forwarding to view driver UI:
 ```shell
 kubectl get svc -n spark-jobs
 kubectl port-forward service/spark-pi-minimal-1625753252972366200-ui-svc 4040:4040 -n spark-jobs
 ```
+Watch for job progress in UI (at [http://localhost:4040](http://localhost:4040))
+![spark-pi-minimal-ui](/assets/images/spark-pi-minimal-ui.png)
 
-Watch for job progress in UI and after it's done check logs for result:
-![spark-pi-minimal-result-logs](/assets/images/spark-pi-minimal-result-logs.png)
+After it's done check logs for result:
+```shell
+kubectl logs spark-pi-minimal-driver -n spark-jobs | grep 'Pi is roughly'
+```
 
 To cleanup delete SparkApplication resource:
 ```shell
 kubectl delete -f manifests/spark-pi-minimal.yaml
 ```
 
-# Periodic spark job deployment
-To deploy periodic spark job change `kind` to `ScheduledSparkApplication` and add `schedule` to `spec` section:
+## Periodic spark job deployment
+To deploy periodic spark job use `ScheduledSparkApplication` resource:
 ```yaml
 apiVersion: "sparkoperator.k8s.io/v1beta2"
 kind: ScheduledSparkApplication
@@ -173,28 +206,29 @@ metadata:
   name: spark-pi-scheduled-minimal
   namespace: spark-jobs
 spec:
-  type: Scala
-  mode: cluster
-  image: "gcr.io/spark-operator/spark:v3.1.1"
-  sparkVersion: "3.1.1"
-  imagePullPolicy: IfNotPresent
   schedule: "@every 5m"
-  mainClass: org.apache.spark.examples.SparkPi
-  mainApplicationFile: "local:///opt/spark/examples/jars/spark-examples_2.12-3.1.1.jar"
-  arguments: ["25000"]
-  restartPolicy:
-    type: Never
-  driver:
-    cores: 1
-    memory: "512m"
-    serviceAccount: spark-jobs-sa
-  executor:
-    cores: 1
-    instances: 1
-    memory: "512m"
+  template:
+    type: Scala
+    mode: cluster
+    image: "gcr.io/spark-operator/spark:v3.1.1"
+    sparkVersion: "3.1.1"
+    imagePullPolicy: IfNotPresent  
+    mainClass: org.apache.spark.examples.SparkPi
+    mainApplicationFile: "local:///opt/spark/examples/jars/spark-examples_2.12-3.1.1.jar"
+    arguments: ["50000"]
+    restartPolicy:
+      type: Never
+    driver:
+      cores: 1
+      memory: "512m"
+      serviceAccount: spark-jobs-sa
+    executor:
+      cores: 1
+      instances: 1
+      memory: "512m"
 ```
 
-then apply manifest:
+Apply manifest to start scheduling:
 ```shell
 kubectl apply -f manifests/spark-pi-scheduled-minimal.yaml
 ```
@@ -202,15 +236,20 @@ kubectl apply -f manifests/spark-pi-scheduled-minimal.yaml
 Find instance of ScheduledSparkApplication and see jobs next execution time:
 ```shell
 kubectl get scheduledsparkapplications -n spark-jobs
-kubectl describe scheduledsparkapplications spark-pi-scheduled-minimal -n spark-jobs | grep 'Next Exec'
+kubectl describe scheduledsparkapplications spark-pi-scheduled-minimal -n spark-jobs | grep 'Status' -A 5
 ```
 
 Wait for a while and you'll see that job has started:
-![spark-pi-scheduled-minimal-pods](/assets/images/spark-pi-scheduled-minimal-pods.png)
+```shell
+kubectl get pods -n spark-jobs
+NAME                                                    READY   STATUS    RESTARTS   AGE
+spark-pi-02d6dc7b1c3c79d4-exec-1                        1/1     Running   0          35s
+spark-pi-scheduled-minimal-1628341920040907157-driver   1/1     Running   0          43s
+```
 
 To stop job scheduling delete resource:
 ```shell
-kubectl delete -f manifests/spark-pi-scheduled--minimal.yaml
+kubectl delete -f manifests/spark-pi-scheduled-minimal.yaml
 ```
 
 In the next post I'll show how to depoy Spark History Server on k8s and use it you spark jobs.
