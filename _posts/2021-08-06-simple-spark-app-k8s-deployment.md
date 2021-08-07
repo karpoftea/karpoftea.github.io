@@ -3,6 +3,7 @@ layout: post
 title: "Simple Spark application k8s deployment"
 date: 2021-08-06 20:00:00 +0300
 tags: [spark, k8s, deployment]
+comments: true
 excerpt: In this post I'll give a short overview of different ways to deploy spark application to k8s cluster and use one of them run a trivial spark application.
 ---
 
