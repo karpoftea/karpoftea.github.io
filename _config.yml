@@ -37,6 +37,8 @@ minima:
 disqus:
   shortname: ikarpov
 
+google_analytics: G-2WZS2DPE8W
+
 # Build settings
 theme: minima
 plugins:
