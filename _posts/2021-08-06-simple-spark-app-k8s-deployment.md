@@ -14,15 +14,15 @@ excerpt: In this post I'll give a short overview of different ways to deploy spa
 [Kubernetes](https://kubernetes.io/) gives a list of opportunities for executing spark applications:
 - cost effectiveness via
     - elastic scaling
-    - separated scaling of compute and storage resources
-- fault tolerance (job can be redeployed to another availability zone if original zone is down)
+    - independent scaling of compute and storage resources
+- fault tolerance (application can be redeployed to another availability zone if original zone is down)
 - increased performance via smart resource planning (e.g. pod/node affinity, binpacking, gang scheduling)
 
 In order to use these opportunities one should know how to deploy spark application to k8s.
 Spark supports running on k8s natively from version [2.3](https://spark.apache.org/releases/spark-release-2-3-0.html) (GA came in [3.1.1](https://spark.apache.org/releases/spark-release-3-1-1.html)), and from that early times community used different ways to deploy spark applications to k8s.
 
 # Spark-native VS k8s-native deployment types
-There are two ways to deploy spark application to k8s: [spark-native](https://spark.apache.org/docs/latest/running-on-kubernetes.html) and k8s-native. Spark-native way is developed in apache-spark project, it uses spark-submit and a set of kubernetes-related parameters to deploy spark application to k8s and in many ways looks similar for those who previously deployed applications to YARN (k8s is treated as another resource manager). It looks like this:
+There are two ways to deploy spark application to k8s: [spark-native](https://spark.apache.org/docs/latest/running-on-kubernetes.html) and k8s-native. Spark-native way is developed internally in apache-spark project, it uses spark-submit and a set of kubernetes-related parameters to deploy spark application to k8s. In many ways looks similar for those who previously deployed applications to YARN (k8s is treated as another resource manager). It looks like this:
 ```
 ./bin/spark-submit \
     --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
@@ -34,7 +34,7 @@ There are two ways to deploy spark application to k8s: [spark-native](https://sp
     local:///path/to/examples.jar
 ```
 
-K8s-native way uses kubernetes primitives Pod, Deployment, CRD etc to deploy spark application. Spark-native way is more imperative style while k8s-native is declarative. It looks like this:
+K8s-native way uses kubernetes primitives like Pod, Deployment, CRD etc to deploy spark application. Spark-native way is more imperative style while k8s-native is declarative. It looks like this:
 ```
 kubectl apply -f manifests/spark-pi-minimal.yaml
 ```
@@ -51,7 +51,7 @@ Because spark application is quite complex (consists of 1 driver and N executors
 - is used by [many companies](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/blob/master/docs/who-is-using.md) and has gained [lots of stars](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/stargazers) on github
 
 ## Prerequisites: installing minikube
-For demo purposes we will use local [minikube](https://minikube.sigs.k8s.io/docs/) k8s cluster. Minikube provides excellent [Getting Started Guide](https://minikube.sigs.k8s.io/docs/start/) to setup local k8s cluster. When you are done with minikube installation start cluster:
+For demo purposes I will use local [minikube](https://minikube.sigs.k8s.io/docs/) k8s cluster. Minikube provides excellent [Getting Started Guide](https://minikube.sigs.k8s.io/docs/start/) to setup local k8s cluster. When you are done with minikube installation start cluster:
 ```shell
 minikube start
 ```
@@ -113,8 +113,8 @@ It will take about 3-5 minutes to pull operator image and start all needed pods,
 
 ## One-off spark job deployment
 Successfuly deployed operator waits for [SparkApplication or ScheduledSparkApplication CRDs](https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/tree/master/charts/spark-operator-chart/crds) to be deployed.
-For demo purposes we will use [SparkPi](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/SparkPi.scala) application bundled in spark disribution (`spark-examples_<scala-ver>-<spark-ver>.jar`).
-To deploy one-off spark job we will use following manifest:
+For demo purposes I will use [SparkPi](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/SparkPi.scala) application bundled in spark disribution (`spark-examples_<scala-ver>-<spark-ver>.jar`).
+One-off spark job manifest is as follows:
 ```yaml
 apiVersion: "sparkoperator.k8s.io/v1beta2"
 kind: SparkApplication
@@ -154,7 +154,7 @@ kubectl get pods -n spark-jobs
 kubectl logs spark-pi-minimal-driver -n spark-jobs | less
 ```
 
-You should see that driver has started, created web-app, and registered executor:
+You should see that driver had started, created web-app, and registered executor:
 ```plain
 15:44:35 INFO Utils: Successfully started service 'SparkUI' on port 4040.
 ...
